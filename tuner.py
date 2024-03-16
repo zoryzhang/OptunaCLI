@@ -7,7 +7,6 @@ from abc import ABC, abstractmethod
 
 from loguru import logger
 import torch.optim as optim
-import lightning as L
 from lightning.pytorch.callbacks import EarlyStopping
 import optuna
 from optuna.integration import PyTorchLightningPruningCallback
