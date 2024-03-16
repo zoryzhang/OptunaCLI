@@ -12,7 +12,7 @@ import optuna
 from lightning.pytorch.tuner import Tuner
 from lightning.pytorch.cli import LightningCLI
 
-from tuner import OptunaMixin
+from tuner import OptunaNet
 
 def set_logger(verbose: bool) -> None:
     logger.remove()
@@ -38,8 +38,8 @@ class OptunaCLI(LightningCLI):
             self.model.monitor()[0]: {'val&test':['Multiline',['val_'+self.model.monitor()[0], 'test_'+self.model.monitor()[0]]]},
         })
         # Coupling with optuna
-        if not isinstance(self.model, OptunaMixin):
-            raise ValueError(f"The model must be a subclass of OptunaMixin, currently {type(self.model)}.")
+        if not isinstance(self.model, OptunaNet):
+            raise ValueError(f"The model must be a subclass of OptunaNet, currently {type(self.model)}.")
         
         if optuna_trial:
             self.model.set_optuna_trial(optuna_trial)

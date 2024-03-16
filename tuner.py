@@ -12,9 +12,10 @@ from lightning.pytorch.callbacks import EarlyStopping
 import optuna
 from optuna.integration import PyTorchLightningPruningCallback
     
-class OptunaMixin(L.LightningModule, ABC):
+class OptunaNet(L.LightningModule, ABC):
     """
     Set self.optuna_trial if running with optuna.
+    When inherited, always put it as the last class in the inheritance list (well, except ABC).
     """
     @abstractmethod
     def monitor(self) -> Tuple[str, str]:
@@ -33,10 +34,9 @@ class OptunaMixin(L.LightningModule, ABC):
             call_backs += [PyTorchLightningPruningCallback(self.optuna_trial, monitor='val_' + self.monitor()[0])]
         return call_backs
 
-class NeuralMixin(OptunaMixin):
+class NeuralNet(OptunaNet):
     """
     Deal with optimizers.
-    When inherited, always put it as the last class in the inheritance list.
     """
     def __init__(self, HPARAMS: Dict, *args, **kwargs):
         super().__init__(*args, **kwargs)
