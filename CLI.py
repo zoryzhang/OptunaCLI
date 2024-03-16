@@ -123,8 +123,8 @@ class OptunaCLI(LightningCLI):
         else: 
             raise ValueError("No action to be done or return value is None. Please set do_fit or do_validate if not yet.")
 
-def cli_main(optuna_trial: optuna.trial.Trial = None):
-    cli = OptunaCLI(optuna_trial=optuna_trial)
+def cli_main(trial: optuna.trial.Trial = None):
+    cli = OptunaCLI(optuna_trial=trial)
     return cli.run()
 
 if __name__ == "__main__":

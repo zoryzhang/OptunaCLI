@@ -10,8 +10,6 @@ import torch.optim as optim
 from lightning.pytorch.callbacks import EarlyStopping
 import optuna
 from optuna.integration import PyTorchLightningPruningCallback
-
-from CLI import cli_main
     
 class OptunaMixin(ABC):
     """
@@ -46,7 +44,7 @@ class NeuralMixin(OptunaMixin, ABC):
         optimizer = optim.Adam(self.parameters(), lr=self.lr)
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode=self.monitor()[1])
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": self.monitor()[0]}
-    
+
 def upartial(f, *args, **kwargs):
     """
     An upgraded version of partial which accepts not named parameters
@@ -87,48 +85,7 @@ class StopWhenTrialKeepBeingPrunedCallback:
             logger.critical(f"Trials have been pruned {self._consequtive_pruned_count} times in a row. Stopping the study.")
             study.stop()
 
-def objective(trial: optuna.trial.Trial) -> float:
-    return cli_main(optuna_trial=trial)
-
-def optuna_main(study_name: str, n_trials: int, direction: str):
-    pruner = optuna.pruners.MedianPruner()
-    if not os.path.exists("../optuna_database"):
-        os.makedirs("../optuna_database")
-    storage = f"sqlite:///../optuna_database/{study_name}.db"
-    study = optuna.create_study(
-        study_name=study_name,
-        storage=storage,
-        direction=direction,
-        pruner=pruner,
-        load_if_exists=True,
-        sampler=optuna.samplers.TPESampler(),
-    )
-    study.optimize(
-        objective, 
-        n_trials=n_trials, 
-        gc_after_trial=True, # garbage collection after each trial
-        callbacks=[StopWhenTrialKeepBeingPrunedCallback(10)]
-        )
-
-if __name__ == "__main__":
-    """
-    To debug, add "JSONARGPARSE_DEBUG=true"
-    
-    Trainable Modules:
-    python tuner.py --study_name=ana_tacgen --direction=min --n_trials=1 --config_file=zory.yaml --model=ana_tacgen --data=anaTacgenData
-    python tuner.py --study_name=tacgenV2 --direction=min --n_trials=1 --config_file=zory.yaml --model=tacgenV2 --data=TacgenV2Data
-    
-    Architecture Choice:
-    python tuner.py --study_name=tacgenBFS --direction=min --n_trials=1 --config_file=zory.yaml --model=BestFirstSearcher --model.init_args.tacgen=tacgenV1 --model.init_args.tacgen=tacgenV1
-    python tuner.py --study_name=tacgenDCS --direction=min --n_trials=1 --config_file=tacgenDCS.yaml --model=DivideConquerSearcher
-    python tuner.py --study_name=ana_tacgenBFS --direction=min --n_trials=1 --config_file=ana_tacgenBFS.yaml --model=DivideConquerSearcher
-    python tuner.py --study_name=ana_tacgenDCS --direction=min --n_trials=1 --config_file=ana_tacgenDCS.yaml --model=DivideConquerSearcher
-    python tuner.py --study_name=ana_tacgenV2BFS --direction=min --n_trials=1 --config_file=ana_tacgenV2BFS.yaml --model=DivideConquerSearcher
-    python tuner.py --study_name=ana_tacgenV2DCS --direction=min --n_trials=1 --config_file=ana_tacgenV2DCS.yaml --model=DivideConquerSearcher
-    python tuner.py --study_name=DORA_tacgenV2BFS --direction=min --n_trials=1 --config_file=DORA_tacgenV2BFS.yaml --model=DivideConquerSearcher
-    python tuner.py --study_name=DORA_tacgenV2DCS --direction=min --n_trials=1 --config_file=DORA_tacgenV2DCS.yaml --model=DivideConquerSearcher
-    python tuner.py --study_name=DORA_DCS --direction=min --n_trials=1 --config_file=DORA_DCS.yaml --model=DivideConquerSearcher
-    """
+def optuna_main(objective: optuna.study.study.ObjectiveFuncType):
     logger.info(f"PID: {os.getpid()}")
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -150,6 +107,49 @@ if __name__ == "__main__":
     args, unknown = parser.parse_known_args()
     #if unknown:
     #    raise ValueError(f"Unknown arguments: {unknown}")
+    
+    study_name = args.study_name
+    direction = args.direction
+    n_trials = args.n_trials
+    pruner = optuna.pruners.MedianPruner()
+    if not os.path.exists("../optuna_database"):
+        os.makedirs("../optuna_database")
+    storage = f"sqlite:///../optuna_database/{study_name}.db"
+    study = optuna.create_study(
+        study_name=study_name,
+        storage=storage,
+        direction=direction,
+        pruner=pruner,
+        load_if_exists=True,
+        sampler=optuna.samplers.TPESampler(),
+    )
     with patch.object(sys, 'argv', [sys.argv[0]] + unknown):
         # remove known args from sys.argv to avoid conflict with LightningCLI
-        optuna_main(args.study_name, args.n_trials, args.direction)
+        study.optimize(
+            objective, 
+            n_trials=n_trials, 
+            gc_after_trial=True, # garbage collection after each trial
+            callbacks=[StopWhenTrialKeepBeingPrunedCallback(10)]
+        )
+
+if __name__ == "__main__":
+    """
+    To debug, add "JSONARGPARSE_DEBUG=true"
+    
+    Trainable Modules:
+    python tuner.py --study_name=ana_tacgen --direction=min --n_trials=1 --config_file=zory.yaml --model=ana_tacgen --data=anaTacgenData
+    python tuner.py --study_name=tacgenV2 --direction=min --n_trials=1 --config_file=zory.yaml --model=tacgenV2 --data=TacgenV2Data
+    
+    Architecture Choice:
+    python tuner.py --study_name=tacgenBFS --direction=min --n_trials=1 --config_file=zory.yaml --model=BestFirstSearcher --model.init_args.tacgen=tacgenV1 --model.init_args.tacgen=tacgenV1
+    python tuner.py --study_name=tacgenDCS --direction=min --n_trials=1 --config_file=tacgenDCS.yaml --model=DivideConquerSearcher
+    python tuner.py --study_name=ana_tacgenBFS --direction=min --n_trials=1 --config_file=ana_tacgenBFS.yaml --model=DivideConquerSearcher
+    python tuner.py --study_name=ana_tacgenDCS --direction=min --n_trials=1 --config_file=ana_tacgenDCS.yaml --model=DivideConquerSearcher
+    python tuner.py --study_name=ana_tacgenV2BFS --direction=min --n_trials=1 --config_file=ana_tacgenV2BFS.yaml --model=DivideConquerSearcher
+    python tuner.py --study_name=ana_tacgenV2DCS --direction=min --n_trials=1 --config_file=ana_tacgenV2DCS.yaml --model=DivideConquerSearcher
+    python tuner.py --study_name=DORA_tacgenV2BFS --direction=min --n_trials=1 --config_file=DORA_tacgenV2BFS.yaml --model=DivideConquerSearcher
+    python tuner.py --study_name=DORA_tacgenV2DCS --direction=min --n_trials=1 --config_file=DORA_tacgenV2DCS.yaml --model=DivideConquerSearcher
+    python tuner.py --study_name=DORA_DCS --direction=min --n_trials=1 --config_file=DORA_DCS.yaml --model=DivideConquerSearcher
+    """
+    from CLI import cli_main
+    optuna_main(cli_main)
