@@ -1,0 +1,128 @@
+import os
+from os.path import join as pjoin
+from typing import Dict, Optional
+
+import notifiers
+from notifiers.logging import NotificationHandler
+from jsonargparse import Namespace
+import matplotlib.pyplot as plt
+from loguru import logger
+import optuna
+
+import torch
+import lightning as L
+import lightning.pytorch as pl
+from lightning.pytorch.tuner import Tuner
+from lightning.pytorch.cli import LightningCLI
+
+from importer import set_logger
+from prototype import OptunaNet
+
+class AnalogyTP_CLI(LightningCLI):
+    def __init__(self, optuna_trial: Optional[optuna.trial.Trial] = None, *args, **kwargs) -> None:
+        self.optuna_trial = optuna_trial
+        super().__init__(
+            run=False, # no auto subcommands
+            auto_configure_optimizers=False,
+            *args, **kwargs)
+        
+        # For logging to slack
+        if self.config["slack_webhook"]:
+            logger.add(NotificationHandler("slack", defaults={"webhook_url": self.config["slack_webhook"], "message": "ERROR from analogyTP projects."}), level="ERROR")
+        # Tensorboard
+        self.trainer.logger.experiment.add_custom_scalars({
+            "Loss": {'train&val':['Multiline',["train_loss_epoch", "val_loss_epoch"]]},
+            self.model.monitor()[0]: {'val&test':['Multiline',['val_'+self.model.monitor()[0], 'test_'+self.model.monitor()[0]]]},
+        })
+        # Coupling with optuna
+        if not isinstance(self.model, OptunaNet):
+            raise ValueError(f"The model must be a subclass of OptunaNet, currently {type(self.model)}.")
+        # torch.compile 
+        if isinstance( self.trainer.accelerator, pl.accelerators.CUDAAccelerator ):
+            logger.info("Using CUDA. Perform torch.compile.")
+            #self.model = torch.compile(self.model)
+        
+        if optuna_trial:
+            self.model.optuna_trial = optuna_trial # for configure_callbacks()
+            self.trainer.logger.log_hyperparams(optuna_trial.params)
+            logger.info(f"Optuna suggests: {optuna_trial.params}")
+    
+    def add_arguments_to_parser(self, parser):
+        parser.add_argument("--verbose",  type=bool, default=False)
+        parser.add_argument("--resuming",  type=bool, default=False, help="Whether resume training from the last checkpoint")
+        parser.add_argument("--tune_lr",  type=bool, default=False, help="Whether to use lr tuner to optimize hyperparameters")
+        parser.add_argument("--tune_bz",  type=bool, default=False, help="Whether to use batchsize tuner to optimize hyperparameters")
+        parser.add_argument("--do_fit",  type=bool, default=False)
+        parser.add_argument("--do_validate",  type=bool, default=False)
+        parser.add_argument("--do_test", type=bool, default=False)
+        parser.add_argument("--do_predict", type=bool, default=False)
+        parser.add_argument("--ckpt_path", type=str, default=None, help="The path to the checkpoint file for validation or testing. When loading from checkpoint, hyperparameters in the checkpoint file will be used, no matter how CLI initialize `cli.model`.")
+        parser.add_argument("--slack_webhook", type=str, default=None)
+        #parser.link_arguments(source=("hparams_list", "optuna_trial"), target="hparams", compute_fn=compute_fn, apply_on="instantiate")
+        #parser.set_defaults({"model.backbone": lazy_instance(MyModel, encoder_layers=24)})
+    
+    def before_instantiate_classes(self):
+        logger.debug("before_instantiate_classes")
+        def iter_helper(optuna_trial, config: Namespace, dic: Dict, prefix=""):
+            for key, value in dic.items():
+                if key == "HPARAMS":
+                    for k, v in value.items():
+                        logger.debug(f"!!! {prefix}HPARAMS.{k} -> {type(v)}")
+                        config.update(key=f"{prefix}HPARAMS.{k}", value=optuna_trial.suggest_float(k, v[0], v[1]))
+                elif isinstance(value, dict):
+                    iter_helper(optuna_trial, config, value, prefix + key + ".")
+        if self.optuna_trial:
+            iter_helper(self.optuna_trial, self.config, self.config.as_dict())
+        
+    def run(self) -> None:
+        set_logger(self.config["verbose"])
+        tuner = Tuner(self.trainer)
+        ret = None
+        if self.config['do_fit']:
+            if self.config['tune_lr']:
+                lr_finder = tuner.lr_find(self.model, datamodule=self.datamodule, early_stop_threshold=None, max_lr=0.005)
+                logger.debug(f"results: {lr_finder.results}")
+                _ = lr_finder.plot(suggest=True)
+                plt.savefig(pjoin(self.trainer.logger.log_dir, "lr_finder.png"))
+                self.model.lr = lr_finder.suggestion()
+                logger.info(f"Optimal learning rate: {self.model.lr}")
+            
+            if self.config['tune_bz']:
+                tuner.scale_batch_size(self.model, datamodule=self.datamodule, mode="binsearch", method="fit")
+                logger.info(f"Optimal batch size for train: {self.datamodule.hparams.batch_size}")
+            
+            self.trainer.fit(self.model, datamodule=self.datamodule, ckpt_path="last" if self.config["resuming"] else None)
+            logger.info(f"Up to now, the best model is saved at {self.trainer.checkpoint_callback.best_model_path}")
+            ret = self.trainer.callback_metrics.get('train_' + self.model.monitor()[0])
+        
+        ckpt_path = self.config["ckpt_path"]
+        if ckpt_path is None and self.trainer.checkpoint_callback.best_model_path != '': ckpt_path = self.trainer.checkpoint_callback.best_model_path
+        if ckpt_path is None: ckpt_path = None
+        
+        if self.config['do_validate']:
+            if self.config['tune_bz']:
+                tuner.scale_batch_size(self.model, datamodule=self.datamodule, mode="binsearch", method="validate")
+                logger.info(f"Optimal batch size for eval: {self.datamodule.hparams.batch_size}")
+            
+            if ckpt_path: self.model = type(self.model).load_from_checkpoint(ckpt_path)
+            self.trainer.validate(self.model, datamodule=self.datamodule, ckpt_path=ckpt_path)
+            ret = self.trainer.callback_metrics.get('val_' + self.model.monitor()[0])
+        
+        if self.config['do_predict']:
+            raise NotImplementedError
+        
+        if ret:
+            if self.config["slack_webhook"]:
+                msg = f"Trial{self.optuna_trial.number if self.optuna_trial else ''}: {ret}"
+                notifiers.get_notifier("slack").notify(message=msg, webhook_url=self.config["slack_webhook"])
+            return ret
+        else: 
+            raise ValueError("No action to be done or return value is None. Please set do_fit or do_validate if not yet.")
+
+def cli_main(optuna_trial: optuna.trial.Trial = None):
+    cli = AnalogyTP_CLI(optuna_trial=optuna_trial)
+    return cli.run()
+
+if __name__ == "__main__":
+    logger.info(f"PID: {os.getpid()}")
+    cli_main()
