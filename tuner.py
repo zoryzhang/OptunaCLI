@@ -7,11 +7,12 @@ from abc import ABC, abstractmethod
 
 from loguru import logger
 import torch.optim as optim
+import lightning as L
 from lightning.pytorch.callbacks import EarlyStopping
 import optuna
 from optuna.integration import PyTorchLightningPruningCallback
     
-class OptunaMixin(ABC):
+class OptunaMixin(L.LightningModule, ABC):
     """
     Set self.optuna_trial if running with optuna.
     """
@@ -32,9 +33,10 @@ class OptunaMixin(ABC):
             call_backs += [PyTorchLightningPruningCallback(self.optuna_trial, monitor='val_' + self.monitor()[0])]
         return call_backs
 
-class NeuralMixin(OptunaMixin, ABC):
+class NeuralMixin(OptunaMixin):
     """
     Deal with optimizers.
+    When inherited, always put it as the last class in the inheritance list.
     """
     def __init__(self, HPARAMS: Dict, *args, **kwargs):
         super().__init__(*args, **kwargs)
