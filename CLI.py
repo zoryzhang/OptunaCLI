@@ -1,4 +1,4 @@
-import os
+import os, sys
 from os.path import join as pjoin
 from typing import Dict, Optional
 
@@ -9,16 +9,19 @@ import matplotlib.pyplot as plt
 from loguru import logger
 import optuna
 
-import torch
-import lightning as L
-import lightning.pytorch as pl
 from lightning.pytorch.tuner import Tuner
 from lightning.pytorch.cli import LightningCLI
 
-from importer import set_logger
-from prototype import OptunaNet
+from tuner import OptunaMixin
 
-class AnalogyTP_CLI(LightningCLI):
+def set_logger(verbose: bool) -> None:
+    logger.remove()
+    if verbose:
+        logger.add(sys.stderr, level="DEBUG")
+    else:
+        logger.add(sys.stderr, level="INFO")
+
+class OptunaCLI(LightningCLI):
     def __init__(self, optuna_trial: Optional[optuna.trial.Trial] = None, *args, **kwargs) -> None:
         self.optuna_trial = optuna_trial
         super().__init__(
@@ -35,17 +38,18 @@ class AnalogyTP_CLI(LightningCLI):
             self.model.monitor()[0]: {'val&test':['Multiline',['val_'+self.model.monitor()[0], 'test_'+self.model.monitor()[0]]]},
         })
         # Coupling with optuna
-        if not isinstance(self.model, OptunaNet):
-            raise ValueError(f"The model must be a subclass of OptunaNet, currently {type(self.model)}.")
-        # torch.compile 
-        if isinstance( self.trainer.accelerator, pl.accelerators.CUDAAccelerator ):
-            logger.info("Using CUDA. Perform torch.compile.")
-            #self.model = torch.compile(self.model)
+        if not isinstance(self.model, OptunaMixin):
+            raise ValueError(f"The model must be a subclass of OptunaMixin, currently {type(self.model)}.")
         
         if optuna_trial:
-            self.model.optuna_trial = optuna_trial # for configure_callbacks()
+            self.model.set_optuna_trial(optuna_trial)
             self.trainer.logger.log_hyperparams(optuna_trial.params)
             logger.info(f"Optuna suggests: {optuna_trial.params}")
+        
+        # torch.compile 
+        #if isinstance( self.trainer.accelerator, pl.accelerators.CUDAAccelerator ):
+        #    logger.info("Using CUDA. Perform torch.compile.")
+            #self.model = torch.compile(self.model)
     
     def add_arguments_to_parser(self, parser):
         parser.add_argument("--verbose",  type=bool, default=False)
@@ -120,7 +124,7 @@ class AnalogyTP_CLI(LightningCLI):
             raise ValueError("No action to be done or return value is None. Please set do_fit or do_validate if not yet.")
 
 def cli_main(optuna_trial: optuna.trial.Trial = None):
-    cli = AnalogyTP_CLI(optuna_trial=optuna_trial)
+    cli = OptunaCLI(optuna_trial=optuna_trial)
     return cli.run()
 
 if __name__ == "__main__":
