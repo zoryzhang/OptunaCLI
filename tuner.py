@@ -2,21 +2,75 @@ import sys, os, functools
 from os.path import join as pjoin
 import argparse
 from unittest.mock import patch
-from typing import Tuple, List, Dict
+from typing import Tuple, List, Dict, Any
 from abc import ABC, abstractmethod
 
 from loguru import logger
+import torch
 import torch.optim as optim
 import lightning as L
-from lightning.pytorch.callbacks import EarlyStopping
+from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 import optuna
 from optuna.integration import PyTorchLightningPruningCallback
-    
+from transformers import get_cosine_schedule_with_warmup
+from lightning.pytorch.strategies.deepspeed import DeepSpeedStrategy
+try:
+    from deepspeed.ops.adam import FusedAdam
+    from deepspeed.ops.adam import DeepSpeedCPUAdam
+except ImportError:
+    logger.warning("Deepspeed is not installed. Remember to turn off deepspeed in the config file.")
+
+def get_optimizers(
+    parameters, trainer: L.Trainer, lr: float, warmup_steps: int
+) -> Dict[str, Any]:
+    """Return an AdamW optimizer with cosine warmup learning rate schedule."""
+    strategy = trainer.strategy
+
+    if isinstance(strategy, DeepSpeedStrategy):
+        if "offload_optimizer" in strategy.config["zero_optimization"]:
+            logger.info("Optimizing with DeepSpeedCPUAdam")
+            optimizer = DeepSpeedCPUAdam(parameters, lr=lr, adamw_mode=True)
+        else:
+            logger.info("Optimizing with FusedAdam")
+            optimizer = FusedAdam(parameters, lr=lr, adam_w_mode=True)
+    else:
+        logger.info("Optimizing with AdamW")
+        optimizer = torch.optim.AdamW(parameters, lr=lr)
+
+    if trainer.max_steps != -1:
+        max_steps = trainer.max_steps
+    else:
+        assert trainer.max_epochs is not None
+        max_steps = (
+            trainer.max_epochs
+            * len(trainer.datamodule.train_dataloader())
+            // trainer.accumulate_grad_batches
+        )
+
+    scheduler = get_cosine_schedule_with_warmup(
+        optimizer,
+        num_warmup_steps=warmup_steps,
+        num_training_steps=max_steps,
+    )
+
+    return {
+        "optimizer": optimizer,
+        "lr_scheduler": {
+            "scheduler": scheduler,
+            "interval": "step",
+        },
+    }
+
 class OptunaNet(L.LightningModule, ABC):
     """
     Set self.optuna_trial if running with optuna.
     When inherited, always put it as the last class in the inheritance list (well, except ABC).
     """
+    def __init__(self, HPARAMS: Dict, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.lr = float(HPARAMS["lr"])
+        self.save_hyperparameters("HPARAMS")
+        
     @abstractmethod
     def monitor(self) -> Tuple[str, str]:
         """
@@ -25,7 +79,7 @@ class OptunaNet(L.LightningModule, ABC):
         """
         pass
 
-    def set_optuna_trial(self, trial: optuna.trial.Trial) -> None: 
+    def set_optuna_trial(self, trial: optuna.trial.Trial) -> None:
         self.optuna_trial = trial
 
     def configure_callbacks(self):
@@ -38,14 +92,18 @@ class NeuralNet(OptunaNet):
     """
     Deal with optimizers.
     """
-    def __init__(self, HPARAMS: Dict, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.lr = float(HPARAMS["lr"])
-    
+    def __init__(self, HPARAMS: Dict, warmup_steps: int, *args, **kwargs):
+        super().__init__(HPARAMS=HPARAMS, *args, **kwargs)
+        self.save_hyperparameters("warmup_steps")
+
     def configure_optimizers(self):
-        optimizer = optim.Adam(self.parameters(), lr=self.lr)
-        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode=self.monitor()[1])
-        return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": self.monitor()[0]}
+        #optimizer = optim.Adam(self.parameters(), lr=self.lr)
+        #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode=self.monitor()[1])
+        #lr_scheduler_config = {"scheduler": scheduler, "monitor": 'val_' + self.monitor()[0]}
+        #return {"optimizer": optimizer, "lr_scheduler": lr_scheduler_config}
+        return get_optimizers(
+            self.parameters(), self.trainer, self.lr, self.hparams.warmup_steps
+        )
 
 def upartial(f, *args, **kwargs):
     """
@@ -109,7 +167,7 @@ def optuna_main(objective: optuna.study.study.ObjectiveFuncType):
     args, unknown = parser.parse_known_args()
     #if unknown:
     #    raise ValueError(f"Unknown arguments: {unknown}")
-    
+
     study_name = args.study_name
     direction = args.direction
     n_trials = args.n_trials
@@ -128,8 +186,8 @@ def optuna_main(objective: optuna.study.study.ObjectiveFuncType):
     with patch.object(sys, 'argv', [sys.argv[0]] + unknown):
         # remove known args from sys.argv to avoid conflict with LightningCLI
         study.optimize(
-            objective, 
-            n_trials=n_trials, 
+            objective,
+            n_trials=n_trials,
             gc_after_trial=True, # garbage collection after each trial
             callbacks=[StopWhenTrialKeepBeingPrunedCallback(10)]
         )
@@ -137,11 +195,11 @@ def optuna_main(objective: optuna.study.study.ObjectiveFuncType):
 if __name__ == "__main__":
     """
     To debug, add "JSONARGPARSE_DEBUG=true"
-    
+
     Trainable Modules:
     python tuner.py --study_name=ana_tacgen --direction=min --n_trials=1 --config_file=zory.yaml --model=ana_tacgen --data=anaTacgenData
     python tuner.py --study_name=tacgenV2 --direction=min --n_trials=1 --config_file=zory.yaml --model=tacgenV2 --data=TacgenV2Data
-    
+
     Architecture Choice:
     python tuner.py --study_name=tacgenBFS --direction=min --n_trials=1 --config_file=zory.yaml --model=BestFirstSearcher --model.init_args.tacgen=tacgenV1 --model.init_args.tacgen=tacgenV1
     python tuner.py --study_name=tacgenDCS --direction=min --n_trials=1 --config_file=tacgenDCS.yaml --model=DivideConquerSearcher
