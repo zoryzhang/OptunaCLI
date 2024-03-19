@@ -87,9 +87,10 @@ class OptunaMixin(ABC):
 class NeuralMixin:
     """
     Deal with optimizers.
+    Will not pass argument HPARAMS to base class, therefore put it as the last customized base class but before library ones.
     """
     def __init__(self, HPARAMS: Dict, warmup_steps: int, *args, **kwargs):
-        super().__init__(HPARAMS=HPARAMS, *args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.save_hyperparameters("HPARAMS", "warmup_steps")
         self.lr = float(HPARAMS["lr"])
 
