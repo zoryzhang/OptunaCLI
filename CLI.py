@@ -80,6 +80,7 @@ class OptunaCLI(LightningCLI):
         
     def run(self) -> None:
         set_logger(self.config["verbose"])
+        logger.info(f"Logging to {self.trainer.log_dir}.")
         tuner = Tuner(self.trainer)
         ret = None
         if self.config['do_fit']:
