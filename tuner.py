@@ -12,16 +12,16 @@ from lightning.pytorch.callbacks import EarlyStopping
 import optuna
 from optuna.integration import PyTorchLightningPruningCallback
     
-class OptunaNet(L.LightningModule, ABC):
+class OptunaMixin(ABC):
     """
     Set self.optuna_trial if running with optuna.
-    When inherited, always put it as the last class in the inheritance list (well, except ABC).
+    When inherited, always put it as the first few class in the inheritance list.
     """
     @abstractmethod
     def monitor(self) -> Tuple[str, str]:
         """
         Specify the metric to monitor and the direction ("min" or "max") to optimize.
-        Optuna pruner and early stopping callback will use f"val_{monitor()[0]}".
+        Optuna pruner and early stopping callback will use f"{self.monitor()[0]}_val".
         """
         pass
 
@@ -29,12 +29,12 @@ class OptunaNet(L.LightningModule, ABC):
         self.optuna_trial = trial
 
     def configure_callbacks(self):
-        call_backs = [EarlyStopping(monitor='val_' + self.monitor()[0], mode=self.monitor()[1], check_on_train_epoch_end=False, verbose=True)]
+        call_backs = [EarlyStopping(monitor=f"{self.monitor()[0]}_val", mode=self.monitor()[1], check_on_train_epoch_end=False, verbose=True)]
         if getattr(self, "optuna_trial", None):
-            call_backs += [PyTorchLightningPruningCallback(self.optuna_trial, monitor='val_' + self.monitor()[0])]
+            call_backs += [PyTorchLightningPruningCallback(self.optuna_trial, monitor=f"{self.monitor()[0]}_val")]
         return call_backs
 
-class NeuralNet(OptunaNet):
+class NeuralMixin():
     """
     Deal with optimizers.
     """
