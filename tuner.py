@@ -7,7 +7,6 @@ from abc import ABC, abstractmethod
 
 from loguru import logger
 import torch
-import torch.optim as optim
 import lightning as L
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint, LearningRateMonitor
 import optuna
@@ -15,11 +14,6 @@ from optuna.integration import PyTorchLightningPruningCallback
 
 from transformers import get_cosine_schedule_with_warmup
 from lightning.pytorch.strategies.deepspeed import DeepSpeedStrategy
-try:
-    from deepspeed.ops.adam import FusedAdam
-    from deepspeed.ops.adam import DeepSpeedCPUAdam
-except ImportError:
-    logger.warning("Deepspeed is not installed. Remember to turn off deepspeed in the config file.")
 
 def get_optimizers(
     parameters, trainer: L.Trainer, lr: float, warmup_steps: int
@@ -28,6 +22,12 @@ def get_optimizers(
     strategy = trainer.strategy
 
     if isinstance(strategy, DeepSpeedStrategy):
+        try:
+            from deepspeed.ops.adam import FusedAdam
+            from deepspeed.ops.adam import DeepSpeedCPUAdam
+        except ImportError:
+            logger.warning("Deepspeed is not installed. Remember to turn off deepspeed in the config file.")
+    
         if "offload_optimizer" in strategy.config["zero_optimization"]:
             logger.info("Optimizing with DeepSpeedCPUAdam")
             optimizer = DeepSpeedCPUAdam(parameters, lr=lr, adamw_mode=True)
@@ -158,13 +158,11 @@ def optuna_main(objective: optuna.study.study.ObjectiveFuncType):
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--study_name",
-        default="example",
         type=str,
     )
     parser.add_argument(
         "--direction",
-        default="max",
-        type=str,
+        choices=["minimize", "maximize"],
     )
     parser.add_argument(
         "--n_trials",
@@ -178,7 +176,8 @@ def optuna_main(objective: optuna.study.study.ObjectiveFuncType):
 
     study_name = args.study_name
     direction = args.direction
-    n_trials = args.n_trials
+    n_trials = args.n_trials if args.n_trials > 0 else None
+    logger.info(f"Study name: {study_name}, direction: {direction}, n_trials: {n_trials}")
     pruner = optuna.pruners.MedianPruner()
     if not os.path.exists("../optuna_database"):
         os.makedirs("../optuna_database")

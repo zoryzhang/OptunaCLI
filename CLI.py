@@ -73,7 +73,11 @@ class OptunaCLI(LightningCLI):
                 if key == "HPARAMS":
                     for k, v in value.items():
                         logger.debug(f"!!! {prefix}HPARAMS.{k} -> {type(v)}")
-                        config.update(key=f"{prefix}HPARAMS.{k}", value=optuna_trial.suggest_float(k, v[0], v[1]))
+                        assert isinstance(v, list)
+                        if len(v) == 2 and isinstance(v[0], float):
+                            config.update(key=f"{prefix}HPARAMS.{k}", value=optuna_trial.suggest_float(k, v[0], v[1]))
+                        else:
+                            config.update(key=f"{prefix}HPARAMS.{k}", value=optuna_trial.suggest_categorical(k, v))
                 elif isinstance(value, dict):
                     iter_helper(optuna_trial, config, value, prefix + key + ".")
         if self.optuna_trial:
