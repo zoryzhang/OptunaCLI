@@ -113,7 +113,7 @@ class OptunaCLI(LightningCLI):
             
             if ckpt_path: self.model = type(self.model).load_from_checkpoint(ckpt_path)
             self.trainer.validate(self.model, datamodule=self.datamodule, ckpt_path=ckpt_path)
-            ret = self.trainer.callback_metrics.get('val_' + self.model.monitor()[0])
+            ret = self.trainer.callback_metrics.get(self.model.monitor()[0] + '_eval')
         
         if self.config['do_predict']:
             raise NotImplementedError

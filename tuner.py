@@ -109,10 +109,6 @@ class NeuralMixin:
         self.lr = float(HPARAMS["lr"])
 
     def configure_optimizers(self):
-        #optimizer = optim.Adam(self.parameters(), lr=self.lr)
-        #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode=self.monitor()[1])
-        #lr_scheduler_config = {"scheduler": scheduler, "monitor": 'val_' + self.monitor()[0]}
-        #return {"optimizer": optimizer, "lr_scheduler": lr_scheduler_config}
         return get_optimizers(
             self.parameters(), self.trainer, self.lr, self.hparams.warmup_steps
         )
