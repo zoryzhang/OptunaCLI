@@ -35,8 +35,8 @@ class OptunaCLI(LightningCLI):
         
         # Tensorboard
         self.trainer.logger.experiment.add_custom_scalars({
-            "Loss": {'train&val':['Multiline',["loss_epoch_train", "loss_epoch_val"]]},
-            self.model.monitor()[0]: {'val&test':['Multiline',[self.model.monitor()[0]+ '_val', self.model.monitor()[0]+ '_test']]},
+            "Loss": {'train&eval':['Multiline',["loss_epoch_train", "loss_epoch_eval"]]},
+            self.model.monitor()[0]: {'val&test':['Multiline',[self.model.monitor()[0]+ '_eval']]},
         })
         
         # Coupling with optuna

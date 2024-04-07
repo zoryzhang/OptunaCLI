@@ -9,7 +9,7 @@ from loguru import logger
 import torch
 import torch.optim as optim
 import lightning as L
-from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
+from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint, LearningRateMonitor
 import optuna
 from optuna.integration import PyTorchLightningPruningCallback
 
@@ -71,7 +71,7 @@ class OptunaMixin(ABC):
     def monitor(self) -> Tuple[str, str]:
         """
         Specify the metric to monitor and the direction ("min" or "max") to optimize.
-        Optuna pruner and early stopping callback will use f"{self.monitor()[0]}_val".
+        Optuna pruner and early stopping callback will use f"{self.monitor()[0]}_eval".
         """
         pass
 
@@ -79,9 +79,23 @@ class OptunaMixin(ABC):
         self.optuna_trial = trial
 
     def configure_callbacks(self):
-        call_backs = [EarlyStopping(monitor=f"{self.monitor()[0]}_val", mode=self.monitor()[1], check_on_train_epoch_end=False, verbose=True)]
+        call_backs = [EarlyStopping(
+            monitor=f"{self.monitor()[0]}_eval", 
+            mode=self.monitor()[1], 
+            check_on_train_epoch_end=False, verbose=True)]
+        call_backs += [
+            ModelCheckpoint(
+                dirpath=None, 
+                filename=f'{{epoch}}-{{step}}-{{{ f"{self.monitor()[0]}_eval" }:.2f}}',
+                monitor=f"{self.monitor()[0]}_eval",
+                mode=self.monitor()[1], 
+                save_last='link',
+                verbose=True,
+                auto_insert_metric_name=True,)
+            ]
+        call_backs += [LearningRateMonitor()]
         if getattr(self, "optuna_trial", None):
-            call_backs += [PyTorchLightningPruningCallback(self.optuna_trial, monitor=f"{self.monitor()[0]}_val")]
+            call_backs += [PyTorchLightningPruningCallback(self.optuna_trial, monitor=f"{self.monitor()[0]}_eval")]
         return call_backs
 
 class NeuralMixin:
