@@ -32,11 +32,13 @@ class OptunaCLI(LightningCLI):
         # For logging to slack
         if self.config["slack_webhook"]:
             logger.add(NotificationHandler("slack", defaults={"webhook_url": self.config["slack_webhook"], "message": "ERROR from analogyTP projects."}), level="ERROR")
+        
         # Tensorboard
         self.trainer.logger.experiment.add_custom_scalars({
-            "Loss": {'train&val':['Multiline',["train_loss_epoch", "val_loss_epoch"]]},
-            self.model.monitor()[0]: {'val&test':['Multiline',['val_'+self.model.monitor()[0], 'test_'+self.model.monitor()[0]]]},
+            "Loss": {'train&val':['Multiline',["loss_epoch_train", "loss_epoch_val"]]},
+            self.model.monitor()[0]: {'val&test':['Multiline',[self.model.monitor()[0]+ '_val', self.model.monitor()[0]+ '_test']]},
         })
+        
         # Coupling with optuna
         if not isinstance(self.model, OptunaMixin):
             raise ValueError(f"The model must be a subclass of OptunaMixin, currently {type(self.model)}.")
@@ -97,8 +99,8 @@ class OptunaCLI(LightningCLI):
                 logger.info(f"Optimal batch size for train: {self.datamodule.hparams.batch_size}")
             
             self.trainer.fit(self.model, datamodule=self.datamodule, ckpt_path="last" if self.config["resuming"] else None)
-            logger.info(f"Up to now, the best model is saved at {self.trainer.checkpoint_callback.best_model_path}")
-            ret = self.trainer.callback_metrics.get('train_' + self.model.monitor()[0])
+            if self.trainer.checkpoint_callback.best_model_path != '': logger.info(f"Up to now, the best model is saved at {self.trainer.checkpoint_callback.best_model_path}")
+            ret = self.trainer.callback_metrics.get(self.model.monitor()[0]+ '_train')
         
         ckpt_path = self.config["ckpt_path"]
         if ckpt_path is None and self.trainer.checkpoint_callback.best_model_path != '': ckpt_path = self.trainer.checkpoint_callback.best_model_path
