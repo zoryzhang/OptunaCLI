@@ -59,7 +59,6 @@ class OptunaCLI(LightningCLI):
         parser.add_argument("--tune_lr",  type=bool, default=False, help="Whether to use lr tuner to optimize hyperparameters")
         parser.add_argument("--tune_bz",  type=bool, default=False, help="Whether to use batchsize tuner to optimize hyperparameters")
         parser.add_argument("--do_fit",  type=bool, default=False)
-        parser.add_argument("--do_validate",  type=bool, default=False)
         parser.add_argument("--do_test", type=bool, default=False)
         parser.add_argument("--do_predict", type=bool, default=False)
         parser.add_argument("--ckpt_path", type=str, default=None, help="The path to the checkpoint file for validation or testing. When loading from checkpoint, hyperparameters in the checkpoint file will be used, no matter how CLI initialize `cli.model`.")
@@ -104,15 +103,14 @@ class OptunaCLI(LightningCLI):
         
         ckpt_path = self.config["ckpt_path"]
         if ckpt_path is None and self.trainer.checkpoint_callback.best_model_path != '': ckpt_path = self.trainer.checkpoint_callback.best_model_path
-        if ckpt_path is None: ckpt_path = None
         
-        if self.config['do_validate']:
+        if self.config['do_test']:
             if self.config['tune_bz']:
-                tuner.scale_batch_size(self.model, datamodule=self.datamodule, mode="binsearch", method="validate")
-                logger.info(f"Optimal batch size for eval: {self.datamodule.hparams.batch_size}")
+                tuner.scale_batch_size(self.model, datamodule=self.datamodule, mode="binsearch", method="test")
+                logger.info(f"Optimal batch size for etst: {self.datamodule.hparams.batch_size}")
             
             if ckpt_path: self.model = type(self.model).load_from_checkpoint(ckpt_path)
-            self.trainer.validate(self.model, datamodule=self.datamodule, ckpt_path=ckpt_path)
+            self.trainer.test(self.model, datamodule=self.datamodule, ckpt_path=ckpt_path)
             ret = self.trainer.callback_metrics.get(self.model.monitor()[0] + '_eval')
         
         if self.config['do_predict']:
@@ -124,7 +122,7 @@ class OptunaCLI(LightningCLI):
                 notifiers.get_notifier("slack").notify(message=msg, webhook_url=self.config["slack_webhook"])
             return ret
         else: 
-            raise ValueError("No action to be done or return value is None. Please set do_fit or do_validate if not yet.")
+            raise ValueError("No action to be done or return value is None. Please set do_fit or do_test if not yet.")
 
 def cli_main(trial: optuna.trial.Trial = None):
     cli = OptunaCLI(optuna_trial=trial)
