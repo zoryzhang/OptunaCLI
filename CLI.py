@@ -67,24 +67,27 @@ class OptunaCLI(LightningCLI):
         #parser.set_defaults({"model.backbone": lazy_instance(MyModel, encoder_layers=24)})
     
     def before_instantiate_classes(self):
+        set_logger(self.config["verbose"])
         logger.debug("before_instantiate_classes")
         def iter_helper(optuna_trial, config: Namespace, dic: Dict, prefix=""):
             for key, value in dic.items():
                 if key == "HPARAMS":
                     for k, v in value.items():
-                        logger.debug(f"!!! {prefix}HPARAMS.{k} -> {type(v)}")
-                        assert isinstance(v, list)
-                        if len(v) == 2 and isinstance(v[0], float):
-                            config.update(key=f"{prefix}HPARAMS.{k}", value=optuna_trial.suggest_float(k, v[0], v[1]))
-                        else:
+                        if not isinstance(v, list): continue # no need to tune
+                        logger.debug(f"!!! {prefix}HPARAMS.{k} -> {v}")
+                        try:
+                            assert len(v) == 2
+                            l = float(v[0])
+                        except (ValueError, AssertionError, TypeError):
                             config.update(key=f"{prefix}HPARAMS.{k}", value=optuna_trial.suggest_categorical(k, v))
+                        else:
+                            config.update(key=f"{prefix}HPARAMS.{k}", value=optuna_trial.suggest_float(k, v[0], v[1]))
                 elif isinstance(value, dict):
                     iter_helper(optuna_trial, config, value, prefix + key + ".")
         if self.optuna_trial:
             iter_helper(self.optuna_trial, self.config, self.config.as_dict())
         
     def run(self) -> None:
-        set_logger(self.config["verbose"])
         logger.info(f"Logging to {self.trainer.log_dir}.")
         tuner = Tuner(self.trainer)
         ret = None

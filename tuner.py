@@ -179,9 +179,9 @@ def optuna_main(objective: optuna.study.study.ObjectiveFuncType):
     n_trials = args.n_trials if args.n_trials > 0 else None
     logger.info(f"Study name: {study_name}, direction: {direction}, n_trials: {n_trials}")
     pruner = optuna.pruners.MedianPruner()
-    if not os.path.exists("../optuna_database"):
-        os.makedirs("../optuna_database")
-    storage = f"sqlite:///../optuna_database/{study_name}.db"
+    if not os.path.exists("./optuna_database"):
+        os.makedirs("./optuna_database")
+    storage = f"sqlite:///./optuna_database/{study_name}.db"
     study = optuna.create_study(
         study_name=study_name,
         storage=storage,
