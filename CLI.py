@@ -60,7 +60,6 @@ class OptunaCLI(LightningCLI):
         parser.add_argument("--tune_bz",  type=bool, default=False, help="Whether to use batchsize tuner to optimize hyperparameters")
         parser.add_argument("--do_fit",  type=bool, default=False)
         parser.add_argument("--do_test", type=bool, default=False)
-        parser.add_argument("--do_predict", type=bool, default=False)
         parser.add_argument("--ckpt_path", type=str, default=None, help="The path to the checkpoint file for validation or testing. When loading from checkpoint, hyperparameters in the checkpoint file will be used, no matter how CLI initialize `cli.model`.")
         parser.add_argument("--slack_webhook", type=str, default=None)
         #parser.link_arguments(source=("hparams_list", "optuna_trial"), target="hparams", compute_fn=compute_fn, apply_on="instantiate")
@@ -106,7 +105,7 @@ class OptunaCLI(LightningCLI):
             
             self.trainer.fit(self.model, datamodule=self.datamodule, ckpt_path="last" if self.config["resuming"] else None)
             if self.trainer.checkpoint_callback.best_model_path != '': logger.info(f"Up to now, the best model is saved at {self.trainer.checkpoint_callback.best_model_path}")
-            ret = self.trainer.callback_metrics.get(self.model.monitor()[0]+ '_train')
+            ret = self.trainer.callback_metrics.get(self.model.monitor()[0]+ '_eval')
         
         ckpt_path = self.config["ckpt_path"]
         if ckpt_path is None and self.trainer.checkpoint_callback.best_model_path != '': ckpt_path = self.trainer.checkpoint_callback.best_model_path
@@ -119,9 +118,6 @@ class OptunaCLI(LightningCLI):
             if ckpt_path: self.model = type(self.model).load_from_checkpoint(ckpt_path)
             self.trainer.test(self.model, datamodule=self.datamodule, ckpt_path=ckpt_path)
             ret = self.trainer.callback_metrics.get(self.model.monitor()[0] + '_eval')
-        
-        if self.config['do_predict']:
-            raise NotImplementedError
         
         if ret:
             if self.config["slack_webhook"]:
