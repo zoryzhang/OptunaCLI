@@ -38,6 +38,9 @@ def get_optimizers(
         logger.info("Optimizing with AdamW")
         optimizer = torch.optim.AdamW(parameters, lr=lr)
 
+    if trainer.datamodule == None:
+        return optimizer
+        
     if trainer.max_steps != -1:
         max_steps = trainer.max_steps
     else:
