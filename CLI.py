@@ -86,6 +86,7 @@ class OptunaCLI(LightningCLI):
             iter_helper(self.optuna_trial, self.config, self.config.as_dict())
         
     def run(self) -> None:
+        set_logger(self.config["verbose"])
         logger.info(f"Logging to {self.trainer.log_dir}.")
         tuner = Tuner(self.trainer)
         ret = None
