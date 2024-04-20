@@ -8,15 +8,15 @@ from abc import ABC, abstractmethod
 from loguru import logger
 import torch
 import lightning as L
-from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint, LearningRateMonitor
+from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint, LearningRateMonitor, StochasticWeightAveraging
 import optuna
-from optuna.integration import PyTorchLightningPruningCallback
+from optuna_integration import PyTorchLightningPruningCallback
 
 from transformers import get_cosine_schedule_with_warmup
 from lightning.pytorch.strategies.deepspeed import DeepSpeedStrategy
 
 def get_optimizers(
-    parameters, trainer: L.Trainer, lr: float, warmup_steps: int
+    parameters, trainer: L.Trainer, lr: float, weight_decay: float, warmup_steps: int
 ) -> Dict[str, Any]:
     """Return an AdamW optimizer with cosine warmup learning rate schedule."""
     strategy = trainer.strategy
@@ -30,13 +30,13 @@ def get_optimizers(
     
         if "offload_optimizer" in strategy.config["zero_optimization"]:
             logger.info("Optimizing with DeepSpeedCPUAdam")
-            optimizer = DeepSpeedCPUAdam(parameters, lr=lr, adamw_mode=True)
+            optimizer = DeepSpeedCPUAdam(parameters, lr=lr, weight_decay=weight_decay, adamw_mode=True)
         else:
             logger.info("Optimizing with FusedAdam")
-            optimizer = FusedAdam(parameters, lr=lr, adam_w_mode=True)
+            optimizer = FusedAdam(parameters, lr=lr, weight_decay=weight_decay, adam_w_mode=True)
     else:
         logger.info("Optimizing with AdamW")
-        optimizer = torch.optim.AdamW(parameters, lr=lr)
+        optimizer = torch.optim.AdamW(parameters, lr=lr, weight_decay=weight_decay)
 
     if trainer.datamodule == None:
         return optimizer
@@ -97,6 +97,7 @@ class OptunaMixin(ABC):
                 auto_insert_metric_name=True,)
             ]
         call_backs += [LearningRateMonitor()]
+        call_backs += [StochasticWeightAveraging(swa_lrs=1e-2)] # https://pytorch.org/blog/pytorch-1.6-now-includes-stochastic-weight-averaging/
         if getattr(self, "optuna_trial", None):
             call_backs += [PyTorchLightningPruningCallback(self.optuna_trial, monitor=f"{self.monitor()[0]}_eval")]
         return call_backs
@@ -113,7 +114,7 @@ class NeuralMixin:
 
     def configure_optimizers(self):
         return get_optimizers(
-            self.parameters(), self.trainer, self.lr, self.hparams.warmup_steps
+            self.parameters(), self.trainer, self.lr, float(self.hparams.HPARAMS["weight_decay"]), self.hparams.warmup_steps
         )
 
 def upartial(f, *args, **kwargs):
