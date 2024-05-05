@@ -93,8 +93,13 @@ class OptunaCLI(LightningCLI):
         if self.config['do_fit']:
             if self.config['tune_lr']:
                 self.datamodule.setup("fit")
+                backup = self.trainer.val_check_interval
+                self.trainer.val_check_interval = 1.0
                 dataloader = self.datamodule.tune_dataloader()
+                
                 lr_finder = tuner.lr_find(self.model, train_dataloaders=dataloader, val_dataloaders=dataloader, early_stop_threshold=None, max_lr=0.005)
+                
+                self.trainer.val_check_interval = backup
                 logger.debug(f"results: {lr_finder.results}")
                 _ = lr_finder.plot(suggest=True)
                 plt.savefig(pjoin(self.trainer.logger.log_dir, "lr_finder.png"))
