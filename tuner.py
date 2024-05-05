@@ -114,7 +114,7 @@ class NeuralMixin:
         self.lr = float(HPARAMS["lr"])
 
     def configure_optimizers(self):
-        weight_decay = math.pow(10.0, self.hparams.HPARAMS["log_weight_decay"])
+        weight_decay = math.pow(10.0, float(self.hparams.HPARAMS["log_weight_decay"]))
         return get_optimizers(
             self.parameters(), self.trainer, self.lr, weight_decay, self.hparams.warmup_steps
         )
