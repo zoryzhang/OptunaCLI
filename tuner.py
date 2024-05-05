@@ -98,7 +98,7 @@ class OptunaMixin(ABC):
                 auto_insert_metric_name=True,)
             ]
         call_backs += [LearningRateMonitor()]
-        call_backs += [StochasticWeightAveraging(swa_lrs=1e-2)] # https://pytorch.org/blog/pytorch-1.6-now-includes-stochastic-weight-averaging/
+        #call_backs += [StochasticWeightAveraging(swa_lrs=1e-2)] # https://pytorch.org/blog/pytorch-1.6-now-includes-stochastic-weight-averaging/
         if getattr(self, "optuna_trial", None):
             call_backs += [PyTorchLightningPruningCallback(self.optuna_trial, monitor=f"{self.monitor()[0]}_eval")]
         return call_backs

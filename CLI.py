@@ -121,7 +121,11 @@ class OptunaCLI(LightningCLI):
             ret = self.trainer.callback_metrics.get(self.model.monitor()[0] + '_eval')
         
         if ret:
-            self.trainer.logger.log_hyperparams(self.optuna_trial.params, metrics={self.model.monitor()[0] + '_eval': ret})
+            if self.optuna_trial: 
+                self.trainer.logger.log_hyperparams(
+                    self.optuna_trial.params, 
+                    metrics={self.model.monitor()[0] + '_eval': ret}
+                )
             if self.config["slack_webhook"]:
                 msg = f"Trial{self.optuna_trial.number if self.optuna_trial else ''}: {ret}"
                 notifiers.get_notifier("slack").notify(message=msg, webhook_url=self.config["slack_webhook"])
