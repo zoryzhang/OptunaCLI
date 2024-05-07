@@ -105,12 +105,14 @@ class OptunaCLI(LightningCLI):
                 tuner.scale_batch_size(self.model, datamodule=self.datamodule, mode="binsearch", method="fit")
                 logger.info(f"Optimal batch size for train: {self.datamodule.hparams.batch_size}")
             
-            self.trainer.fit(self.model, datamodule=self.datamodule, ckpt_path="last" if self.config["resuming"] else None)
+            ckpt_path = self.config["ckpt_path"] if self.config["resuming"] else None
+            self.trainer.fit(self.model, datamodule=self.datamodule, ckpt_path=ckpt_path)
             if self.trainer.checkpoint_callback.best_model_path != '': logger.info(f"Up to now, the best model is saved at {self.trainer.checkpoint_callback.best_model_path}")
             ret = self.trainer.callback_metrics.get(self.model.monitor()[0]+ '_eval')
         
         ckpt_path = self.config["ckpt_path"]
-        if ckpt_path is None and self.trainer.checkpoint_callback.best_model_path != '': ckpt_path = self.trainer.checkpoint_callback.best_model_path
+        if ckpt_path is None and self.trainer.checkpoint_callback.best_model_path != '': 
+            ckpt_path = self.trainer.checkpoint_callback.best_model_path
         
         if self.config['do_test']:
             if self.config['tune_bz']:
