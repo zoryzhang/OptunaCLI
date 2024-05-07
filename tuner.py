@@ -12,12 +12,13 @@ import lightning as L
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint, LearningRateMonitor, StochasticWeightAveraging
 import optuna
 from optuna_integration import PyTorchLightningPruningCallback
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from transformers import get_cosine_schedule_with_warmup
 from lightning.pytorch.strategies.deepspeed import DeepSpeedStrategy
 
 def get_optimizers(
-    parameters, trainer: L.Trainer, lr: float, weight_decay: float, warmup_steps: int
+    parameters, trainer: L.Trainer, lr: float, weight_decay: float, warmup_steps: int, direction: str
 ) -> Dict[str, Any]:
     """Return an AdamW optimizer with cosine warmup learning rate schedule."""
     strategy = trainer.strategy
@@ -44,13 +45,18 @@ def get_optimizers(
         
     if trainer.max_steps != -1:
         max_steps = trainer.max_steps
-    else:
-        assert trainer.max_epochs is not None
+    elif trainer.max_epochs != -1:
         max_steps = (
             trainer.max_epochs
             * len(trainer.datamodule.train_dataloader())
             // trainer.accumulate_grad_batches
         )
+    else:
+        scheduler = ReduceLROnPlateau(optimizer, mode=direction, factor=0.1, patience=3, verbose=True)
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": scheduler,
+        }
 
     scheduler = get_cosine_schedule_with_warmup(
         optimizer,
@@ -116,7 +122,8 @@ class NeuralMixin:
     def configure_optimizers(self):
         weight_decay = math.pow(10.0, float(self.hparams.HPARAMS["log_weight_decay"]))
         return get_optimizers(
-            self.parameters(), self.trainer, self.lr, weight_decay, self.hparams.warmup_steps
+            self.parameters(), self.trainer, self.lr, weight_decay, self.hparams.warmup_steps,
+            self.monitor()[1]
         )
 
 def upartial(f, *args, **kwargs):

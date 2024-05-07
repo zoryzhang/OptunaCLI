@@ -23,7 +23,6 @@ def set_logger(verbose: bool) -> None:
 
 class OptunaCLI(LightningCLI):
     def __init__(self, optuna_trial: Optional[optuna.trial.Trial] = None, *args, **kwargs) -> None:
-        self.optuna_trial = optuna_trial
         super().__init__(
             run=False, # no auto subcommands
             auto_configure_optimizers=False,
@@ -39,11 +38,11 @@ class OptunaCLI(LightningCLI):
             self.model.monitor()[0]: {'val&test':['Multiline',[self.model.monitor()[0]+ '_eval']]},
         })
         
-        # Coupling with optuna
-        if not isinstance(self.model, OptunaMixin):
-            raise ValueError(f"The model must be a subclass of OptunaMixin, currently {type(self.model)}.")
-        
+        self.optuna_trial = optuna_trial
         if optuna_trial:
+            # Coupling with optuna
+            if not isinstance(self.model, OptunaMixin):
+                raise ValueError(f"The model must be a subclass of OptunaMixin, currently {type(self.model)}.")
             self.model.set_optuna_trial(optuna_trial)
             logger.info(f"Optuna suggests: {optuna_trial.params}")
         
@@ -65,8 +64,6 @@ class OptunaCLI(LightningCLI):
         #parser.set_defaults({"model.backbone": lazy_instance(MyModel, encoder_layers=24)})
     
     def before_instantiate_classes(self):
-        set_logger(self.config["verbose"])
-        logger.debug("before_instantiate_classes")
         def iter_helper(optuna_trial, config: Namespace, dic: Dict, prefix=""):
             for key, value in dic.items():
                 if key == "HPARAMS":
@@ -76,12 +73,16 @@ class OptunaCLI(LightningCLI):
                         try:
                             assert len(v) == 2
                             l = float(v[0])
+                            r = float(v[1])
                         except (ValueError, AssertionError, TypeError):
                             config.update(key=f"{prefix}HPARAMS.{k}", value=optuna_trial.suggest_categorical(k, v))
                         else:
                             config.update(key=f"{prefix}HPARAMS.{k}", value=optuna_trial.suggest_float(k, v[0], v[1]))
                 elif isinstance(value, dict):
                     iter_helper(optuna_trial, config, value, prefix + key + ".")
+                    
+        set_logger(self.config["verbose"])
+        logger.debug("before_instantiate_classes")
         if self.optuna_trial:
             iter_helper(self.optuna_trial, self.config, self.config.as_dict())
         
