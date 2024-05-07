@@ -23,6 +23,7 @@ def set_logger(verbose: bool) -> None:
 
 class OptunaCLI(LightningCLI):
     def __init__(self, optuna_trial: Optional[optuna.trial.Trial] = None, *args, **kwargs) -> None:
+        self.optuna_trial = optuna_trial
         super().__init__(
             run=False, # no auto subcommands
             auto_configure_optimizers=False,
@@ -38,7 +39,6 @@ class OptunaCLI(LightningCLI):
             self.model.monitor()[0]: {'val&test':['Multiline',[self.model.monitor()[0]+ '_eval']]},
         })
         
-        self.optuna_trial = optuna_trial
         if optuna_trial:
             # Coupling with optuna
             if not isinstance(self.model, OptunaMixin):
