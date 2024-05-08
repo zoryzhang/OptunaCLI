@@ -18,7 +18,7 @@ from transformers import get_cosine_schedule_with_warmup
 from lightning.pytorch.strategies.deepspeed import DeepSpeedStrategy
 
 def get_optimizers(
-    parameters, trainer: L.Trainer, lr: float, weight_decay: float, warmup_steps: int, direction: str
+    parameters, trainer: L.Trainer, lr: float, weight_decay: float, warmup_steps: int, direction: str, monitor: str
 ) -> Dict[str, Any]:
     """Return an AdamW optimizer with cosine warmup learning rate schedule."""
     strategy = trainer.strategy
@@ -56,6 +56,7 @@ def get_optimizers(
         return {
             "optimizer": optimizer,
             "lr_scheduler": scheduler,
+            "monitor": monitor,
         }
 
     scheduler = get_cosine_schedule_with_warmup(
@@ -123,7 +124,7 @@ class NeuralMixin:
         weight_decay = math.pow(10.0, float(self.hparams.HPARAMS["log_weight_decay"]))
         return get_optimizers(
             self.parameters(), self.trainer, self.lr, weight_decay, self.hparams.warmup_steps,
-            self.monitor()[1]
+            self.monitor()[1], self.monitor()[0]
         )
 
 def upartial(f, *args, **kwargs):
