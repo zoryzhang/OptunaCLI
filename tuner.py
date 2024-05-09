@@ -52,11 +52,11 @@ def get_optimizers(
             // trainer.accumulate_grad_batches
         )
     else:
-        scheduler = ReduceLROnPlateau(optimizer, mode=direction, factor=0.1, patience=3, verbose=True)
+        scheduler = ReduceLROnPlateau(optimizer, mode=direction, factor=0.1, patience=3)
         return {
             "optimizer": optimizer,
             "lr_scheduler": scheduler,
-            "monitor": monitor,
+            "monitor": monitor + "_eval",
         }
 
     scheduler = get_cosine_schedule_with_warmup(
