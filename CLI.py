@@ -60,6 +60,7 @@ class OptunaCLI(LightningCLI):
         parser.add_argument("--do_test", type=bool, default=False)
         parser.add_argument("--ckpt_path", type=str, default=None, help="The path to the checkpoint file for validation or testing. When loading from checkpoint, hyperparameters in the checkpoint file will be used, no matter how CLI initialize `cli.model`.")
         parser.add_argument("--slack_webhook", type=str, default=None)
+        parser.add_argument("--slurmid", type=str, default=None)
         #parser.link_arguments(source=("hparams_list", "optuna_trial"), target="hparams", compute_fn=compute_fn, apply_on="instantiate")
         #parser.set_defaults({"model.backbone": lazy_instance(MyModel, encoder_layers=24)})
     
