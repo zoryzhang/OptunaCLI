@@ -1,6 +1,7 @@
 import os, sys
 from os.path import join as pjoin
-from typing import Dict, Optional
+from typing import Dict, Optional, List
+import pickle
 
 import notifiers
 from notifiers.logging import NotificationHandler
@@ -58,6 +59,7 @@ class OptunaCLI(LightningCLI):
         parser.add_argument("--tune_bz",  type=bool, default=False, help="Whether to use batchsize tuner to optimize hyperparameters")
         parser.add_argument("--do_fit",  type=bool, default=False)
         parser.add_argument("--do_test", type=bool, default=False)
+        parser.add_argument("--do_predict", type=bool, default=False)
         parser.add_argument("--ckpt_path", type=str, default=None, help="The path to the checkpoint file for validation or testing. When loading from checkpoint, hyperparameters in the checkpoint file will be used, no matter how CLI initialize `cli.model`.")
         parser.add_argument("--slack_webhook", type=str, default=None)
         parser.add_argument("--slurmid", type=str, default=None, help="Only for logging purpose.")
@@ -118,17 +120,31 @@ class OptunaCLI(LightningCLI):
         if self.config['do_test']:
             if self.config['tune_bz']:
                 tuner.scale_batch_size(self.model, datamodule=self.datamodule, mode="binsearch", method="test")
-                logger.info(f"Optimal batch size for etst: {self.datamodule.hparams.batch_size}")
+                logger.info(f"Optimal batch size for test: {self.datamodule.hparams.batch_size}")
             
             if ckpt_path: self.model = type(self.model).load_from_checkpoint(ckpt_path)
             self.trainer.test(self.model, datamodule=self.datamodule, ckpt_path=ckpt_path)
             ret = self.trainer.callback_metrics.get(self.model.monitor()[0] + '_eval')
         
+        if self.config['do_predict']:
+            if self.config['tune_bz']:
+                tuner.scale_batch_size(self.model, datamodule=self.datamodule, mode="binsearch", method="predict")
+                logger.info(f"Optimal batch size for predict: {self.datamodule.hparams.batch_size}")
+            
+            if ckpt_path: self.model = type(self.model).load_from_checkpoint(ckpt_path)
+            prediction : List[Dict] = self.trainer.predict(self.model, datamodule=self.datamodule, ckpt_path=ckpt_path)
+            ret = self.trainer.callback_metrics.get(self.model.monitor()[0] + '_eval')
+            if self.trainer.log_dir is not None:
+                output_path = os.path.join(self.trainer.log_dir, "predictions.pickle")
+                with open(output_path, "wb") as oup:
+                    pickle.dump(prediction, oup)
+                logger.info(f"Predictions saved to {output_path}")
+        
         if ret is not None:
             if self.optuna_trial: 
                 self.trainer.logger.log_hyperparams(
                     self.optuna_trial.params, 
-                    metrics={self.model.monitor()[0] + '_eval': ret}
+                    metrics=self.trainer.callback_metrics
                 )
             if self.config["slack_webhook"]:
                 msg = f"Trial{self.optuna_trial.number if self.optuna_trial else ''}: {ret}"
