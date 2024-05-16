@@ -141,10 +141,11 @@ class OptunaCLI(LightningCLI):
                 logger.info(f"Predictions saved to {output_path}")
         
         if ret is not None:
-            if self.optuna_trial: 
+            if self.optuna_trial:
+                metric = {"metric" + key: value for key, value in self.trainer.callback_metrics.items()}
                 self.trainer.logger.log_hyperparams(
                     self.optuna_trial.params, 
-                    metrics=self.trainer.callback_metrics
+                    metrics=metric
                 )
             if self.config["slack_webhook"]:
                 msg = f"Trial{self.optuna_trial.number if self.optuna_trial else ''}: {ret}"
