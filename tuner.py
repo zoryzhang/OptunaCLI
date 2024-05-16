@@ -2,7 +2,7 @@ import sys, os, functools
 from os.path import join as pjoin
 import argparse
 from unittest.mock import patch
-from typing import Tuple, List, Dict, Any
+from typing import Tuple, List, Dict, Any, Union
 from abc import ABC, abstractmethod
 import math
 
@@ -16,62 +16,6 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from transformers import get_cosine_schedule_with_warmup
 from lightning.pytorch.strategies.deepspeed import DeepSpeedStrategy
-
-def get_optimizers(
-    parameters, trainer: L.Trainer, lr: float, weight_decay: float, warmup_steps: int, direction: str, monitor: str
-) -> Dict[str, Any]:
-    """Return an AdamW optimizer with cosine warmup learning rate schedule."""
-    strategy = trainer.strategy
-
-    if isinstance(strategy, DeepSpeedStrategy):
-        try:
-            from deepspeed.ops.adam import FusedAdam
-            from deepspeed.ops.adam import DeepSpeedCPUAdam
-        except ImportError:
-            logger.warning("Deepspeed is not installed. Remember to turn off deepspeed in the config file.")
-    
-        if "offload_optimizer" in strategy.config["zero_optimization"]:
-            logger.info("Optimizing with DeepSpeedCPUAdam")
-            optimizer = DeepSpeedCPUAdam(parameters, lr=lr, weight_decay=weight_decay, adamw_mode=True)
-        else:
-            logger.info("Optimizing with FusedAdam")
-            optimizer = FusedAdam(parameters, lr=lr, weight_decay=weight_decay, adam_w_mode=True)
-    else:
-        logger.info("Optimizing with AdamW")
-        optimizer = torch.optim.AdamW(parameters, lr=lr, weight_decay=weight_decay)
-
-    if trainer.datamodule == None:
-        return optimizer
-        
-    if trainer.max_steps != -1:
-        max_steps = trainer.max_steps
-    elif trainer.max_epochs != -1:
-        max_steps = (
-            trainer.max_epochs
-            * len(trainer.datamodule.train_dataloader())
-            // trainer.accumulate_grad_batches
-        )
-    else:
-        scheduler = ReduceLROnPlateau(optimizer, mode=direction, factor=0.1, patience=3)
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": scheduler,
-            "monitor": monitor + "_eval",
-        }
-
-    scheduler = get_cosine_schedule_with_warmup(
-        optimizer,
-        num_warmup_steps=warmup_steps,
-        num_training_steps=max_steps,
-    )
-
-    return {
-        "optimizer": optimizer,
-        "lr_scheduler": {
-            "scheduler": scheduler,
-            "interval": "step",
-        },
-    }
 
 class OptunaMixin(ABC):
     """
@@ -122,10 +66,55 @@ class NeuralMixin:
 
     def configure_optimizers(self):
         weight_decay = math.pow(10.0, float(self.hparams.HPARAMS["log_weight_decay"]))
-        return get_optimizers(
-            self.parameters(), self.trainer, self.lr, weight_decay, self.hparams.warmup_steps,
-            self.monitor()[1], self.monitor()[0]
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=weight_decay)
+        
+        trainer = self.trainer
+        if trainer.datamodule == None:
+            return optimizer
+            
+        if trainer.max_steps != -1:
+            max_steps = trainer.max_steps
+        elif trainer.max_epochs != -1:
+            max_steps = (
+                trainer.max_epochs
+                * trainer.num_training_batches
+                // trainer.accumulate_grad_batches
+            )
+        else:
+            scheduler = ReduceLROnPlateau(optimizer, mode=self.monitor()[1], factor=0.1, patience=3)
+            if trainer.check_val_every_n_epoch == 1:
+                return {
+                    "optimizer": optimizer,
+                    "lr_scheduler": {
+                        "scheduler": scheduler,
+                        "frequency": trainer.val_check_interval * trainer.num_training_batches,
+                        "interval": "step",
+                        "monitor": self.monitor()[0] + "_eval",
+                    }
+                }
+            else:
+                return {
+                    "optimizer": optimizer,
+                    "lr_scheduler": {
+                        "scheduler": scheduler,
+                        "frequency": trainer.check_val_every_n_epoch,
+                        "interval": "epoch",
+                        "monitor": self.monitor()[0] + "_eval",
+                    }
+                }
+
+        scheduler = get_cosine_schedule_with_warmup(
+            optimizer,
+            num_warmup_steps=self.hparams.warmup_steps,
+            num_training_steps=max_steps,
         )
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "step",
+            },
+        }
 
 def upartial(f, *args, **kwargs):
     """
