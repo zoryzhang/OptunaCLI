@@ -124,7 +124,7 @@ class OptunaCLI(LightningCLI):
             self.trainer.test(self.model, datamodule=self.datamodule, ckpt_path=ckpt_path)
             ret = self.trainer.callback_metrics.get(self.model.monitor()[0] + '_eval')
         
-        if ret:
+        if ret is not None:
             if self.optuna_trial: 
                 self.trainer.logger.log_hyperparams(
                     self.optuna_trial.params, 
