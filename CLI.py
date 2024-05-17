@@ -89,7 +89,7 @@ class OptunaCLI(LightningCLI):
         if self.optuna_trial:
             iter_helper(self.optuna_trial, self.config, self.config.as_dict())
         
-    def run(self) -> None:
+    def run(self, **kwargs) -> None:
         set_logger(self.config["verbose"])
         logger.info(f"Logging to {self.trainer.log_dir}.")
         tuner = Tuner(self.trainer)
@@ -116,22 +116,21 @@ class OptunaCLI(LightningCLI):
         ckpt_path = self.config["ckpt_path"]
         if ckpt_path is None and self.trainer.checkpoint_callback.best_model_path != '': 
             ckpt_path = self.trainer.checkpoint_callback.best_model_path
+        if ckpt_path: self.model = type(self.model).load_from_checkpoint(ckpt_path, **kwargs)
         
         if self.config['do_test']:
             if self.config['tune_bz']:
                 tuner.scale_batch_size(self.model, datamodule=self.datamodule, mode="binsearch", method="test")
-                logger.info(f"Optimal batch size for test: {self.datamodule.hparams.batch_size}")
+                logger.info(f"Optimal batch size for test: {self.model.hparams.batch_size}")
             
-            if ckpt_path: self.model = type(self.model).load_from_checkpoint(ckpt_path)
             self.trainer.test(self.model, datamodule=self.datamodule, ckpt_path=ckpt_path)
             ret = self.trainer.callback_metrics.get(self.model.monitor()[0] + '_eval')
         
         if self.config['do_predict']:
             if self.config['tune_bz']:
                 tuner.scale_batch_size(self.model, datamodule=self.datamodule, mode="binsearch", method="predict")
-                logger.info(f"Optimal batch size for predict: {self.datamodule.hparams.batch_size}")
+                logger.info(f"Optimal batch size for predict: {self.model.hparams.batch_size}")
             
-            if ckpt_path: self.model = type(self.model).load_from_checkpoint(ckpt_path)
             prediction : List[Dict] = self.trainer.predict(self.model, datamodule=self.datamodule, ckpt_path=ckpt_path)
             ret = self.trainer.callback_metrics.get(self.model.monitor()[0] + '_eval')
             if self.trainer.log_dir is not None:
