@@ -139,19 +139,22 @@ class OptunaCLI(LightningCLI):
                     pickle.dump(prediction, oup)
                 logger.info(f"Predictions saved to {output_path}")
         
-        if ret is not None:
-            if self.optuna_trial:
-                metric = {"metric" + key: value for key, value in self.trainer.callback_metrics.items()}
-                self.trainer.logger.log_hyperparams(
-                    self.optuna_trial.params, 
-                    metrics=metric
-                )
-            if self.config["slack_webhook"]:
-                msg = f"Trial{self.optuna_trial.number if self.optuna_trial else ''}: {ret}"
-                notifiers.get_notifier("slack").notify(message=msg, webhook_url=self.config["slack_webhook"])
-            return ret
-        else: 
-            raise ValueError("No action to be done or return value is None. Please set do_fit or do_test if not yet.")
+        if not (self.config['do_fit'] or self.config['do_test'] or self.config['do_predict']):
+            logger.critical("Please specify do_fit, do_test or do_predict.")
+        
+        if ret is not None and self.optuna_trial:
+            metric = {"metric" + key: value for key, value in self.trainer.callback_metrics.items()}
+            self.trainer.logger.log_hyperparams(
+                self.optuna_trial.params, 
+                metrics=metric
+            )
+                
+        if self.config["slack_webhook"]:
+            if ret == None: msg = "Failed."
+            else: msg = f"Trial{self.optuna_trial.number if self.optuna_trial else ''}: {ret}"
+            notifiers.get_notifier("slack").notify(message=msg, webhook_url=self.config["slack_webhook"])
+        
+        return ret
 
 def cli_main(trial: optuna.trial.Trial = None):
     cli = OptunaCLI(optuna_trial=trial)
