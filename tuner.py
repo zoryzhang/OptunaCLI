@@ -62,7 +62,7 @@ class NeuralMixin:
     def __init__(self, HPARAMS: Dict, warmup_steps: int, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.save_hyperparameters("HPARAMS", "warmup_steps")
-        self.lr = float(HPARAMS["lr"])
+        self.lr = math.pow(10.0, float(HPARAMS["log_lr"]))
 
     def configure_optimizers(self):
         weight_decay = math.pow(10.0, float(self.hparams.HPARAMS["log_weight_decay"]))

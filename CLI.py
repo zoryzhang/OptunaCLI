@@ -53,6 +53,7 @@ class OptunaCLI(LightningCLI):
             #self.model = torch.compile(self.model)
     
     def add_arguments_to_parser(self, parser):
+        parser.add_argument("--hparams_file", type=str, default=None)
         parser.add_argument("--verbose",  type=bool, default=False)
         parser.add_argument("--resuming",  type=bool, default=False, help="Whether resume training from the last checkpoint")
         parser.add_argument("--tune_lr",  type=bool, default=False, help="Whether to use lr tuner to optimize hyperparameters")
