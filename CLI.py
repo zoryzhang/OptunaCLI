@@ -124,7 +124,6 @@ class OptunaCLI(LightningCLI):
         ckpt_path = self.config["ckpt_path"]
         if ckpt_path is None and self.trainer.checkpoint_callback.best_model_path != '': 
             ckpt_path = self.trainer.checkpoint_callback.best_model_path
-        if ckpt_path: self.model = type(self.model).load_from_checkpoint(ckpt_path, **kwargs)
         
         if self.config['do_test']:
             if self.config['tune_bz']:
@@ -139,13 +138,8 @@ class OptunaCLI(LightningCLI):
                 tuner.scale_batch_size(self.model, datamodule=self.datamodule, mode="binsearch", method="predict")
                 logger.info(f"Optimal batch size for predict: {self.model.hparams.batch_size}")
             
-            prediction : List[Dict] = self.trainer.predict(self.model, datamodule=self.datamodule, ckpt_path=ckpt_path)
+            self.trainer.predict(self.model, datamodule=self.datamodule, ckpt_path=ckpt_path)
             ret = self.trainer.callback_metrics.get(self.model.monitor()[0] + '_eval')
-            if self.trainer.log_dir is not None:
-                output_path = os.path.join(self.trainer.log_dir, "predictions.pickle")
-                with open(output_path, "wb") as oup:
-                    pickle.dump(prediction, oup)
-                logger.info(f"Predictions saved to {output_path}")
         
         if not (self.config['do_fit'] or self.config['do_test'] or self.config['do_predict']):
             logger.critical("Please specify do_fit, do_test or do_predict.")
@@ -162,6 +156,9 @@ class OptunaCLI(LightningCLI):
             else: msg = f"Trial{self.optuna_trial.number if self.optuna_trial else ''}: {ret}"
             notifiers.get_notifier("slack").notify(message=msg, webhook_url=self.config["slack_webhook"])
         
+        # in case of other operations
+        if ckpt_path:
+            self.model = type(self.model).load_from_checkpoint(ckpt_path, **kwargs)
         return ret
 
 def cli_main(trial: optuna.trial.Trial = None):
