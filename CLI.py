@@ -3,6 +3,7 @@ from os.path import join as pjoin
 from typing import Dict, Optional, List
 import pickle
 
+import torch
 import notifiers
 from notifiers.logging import NotificationHandler
 from jsonargparse import Namespace
@@ -10,6 +11,7 @@ import matplotlib.pyplot as plt
 from loguru import logger
 import optuna
 
+import lightning
 from lightning.pytorch.tuner import Tuner
 from lightning.pytorch.cli import LightningCLI
 
@@ -48,9 +50,14 @@ class OptunaCLI(LightningCLI):
             logger.info(f"Optuna suggests: {optuna_trial.params}")
         
         # torch.compile 
-        #if isinstance( self.trainer.accelerator, pl.accelerators.CUDAAccelerator ):
-        #    logger.info("Using CUDA. Perform torch.compile.")
-            #self.model = torch.compile(self.model)
+        # if isinstance( self.trainer.accelerator, lightning.pytorch.accelerators.CUDAAccelerator ):
+        #     logger.info("Using CUDA. Perform torch.compile.")
+        #     try:
+        #         self.model = torch.compile(self.model)
+        #     except:
+        #         pass
+        #     else:
+        #         print("Failed. Fine.")
     
     def add_arguments_to_parser(self, parser):
         parser.add_argument("--hparams_file", type=str, default=None)
