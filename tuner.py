@@ -60,6 +60,7 @@ class NeuralMixin:
     Will not pass argument HPARAMS to base class, therefore put it as the last customized base class but before library ones.
     """
     def __init__(self, HPARAMS: Dict, n_warmup_step: int, *args, **kwargs):
+        kwargs.pop("warmup_steps", None) # TODO: remove this
         super().__init__(*args, **kwargs)
         self.save_hyperparameters("HPARAMS", "n_warmup_step")
         self.lr = math.pow(10.0, float(HPARAMS["log_lr"]))
