@@ -91,15 +91,20 @@ class OptunaCLI(LightningCLI):
                             config.update(key=f"{prefix}HPARAMS.{k}", value=optuna_trial.suggest_float(k, v[0], v[1]))
                 elif isinstance(value, dict):
                     iter_helper(optuna_trial, config, value, prefix + key + ".")
-                    
+        
         set_logger(self.config["verbose"])
+        
         logger.debug("before_instantiate_classes")
         if self.optuna_trial:
             iter_helper(self.optuna_trial, self.config, self.config.as_dict())
         
     def run(self, **kwargs) -> None:
         set_logger(self.config["verbose"])
+        if self.config['tune_lr']:
+            if not os.path.exists(self.config["trainer"]["default_root_dir"]):
+                os.makedirs(self.config["trainer"]["default_root_dir"])
         logger.info(f"Logging to {self.trainer.log_dir}.")
+        
         tuner = Tuner(self.trainer)
         ret = None
         if self.config['do_fit']:

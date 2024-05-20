@@ -59,9 +59,9 @@ class NeuralMixin:
     Deal with optimizers.
     Will not pass argument HPARAMS to base class, therefore put it as the last customized base class but before library ones.
     """
-    def __init__(self, HPARAMS: Dict, warmup_steps: int, *args, **kwargs):
+    def __init__(self, HPARAMS: Dict, n_warmup_step: int, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.save_hyperparameters("HPARAMS", "warmup_steps")
+        self.save_hyperparameters("HPARAMS", "n_warmup_step")
         self.lr = math.pow(10.0, float(HPARAMS["log_lr"]))
 
     def configure_optimizers(self):
@@ -105,7 +105,7 @@ class NeuralMixin:
 
         scheduler = get_cosine_schedule_with_warmup(
             optimizer,
-            num_warmup_steps=self.hparams.warmup_steps,
+            num_warmup_steps=self.hparams.n_warmup_step,
             num_training_steps=max_steps,
         )
         return {
