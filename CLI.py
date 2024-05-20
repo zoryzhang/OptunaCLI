@@ -163,7 +163,7 @@ class OptunaCLI(LightningCLI):
         
         # in case of other operations
         if ckpt_path:
-            self.model = type(self.model).load(ckpt_path, **kwargs)
+            self.model = type(self.model).load(ckpt_path, device=self.model.device, freeze=True, **kwargs)
         return ret
 
 def cli_main(trial: optuna.trial.Trial = None):
