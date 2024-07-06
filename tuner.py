@@ -34,10 +34,11 @@ class OptunaMixin(ABC):
         self.optuna_trial = trial
 
     def configure_callbacks(self):
-        call_backs = [EarlyStopping(
-            monitor=f"{self.monitor()[0]}_eval", 
-            mode=self.monitor()[1], 
-            check_on_train_epoch_end=False, verbose=True)]
+        #call_backs = [EarlyStopping(
+        #    monitor=f"{self.monitor()[0]}_eval", 
+        #    mode=self.monitor()[1], 
+        #    check_on_train_epoch_end=False, verbose=True)]
+        call_backs = []
         call_backs += [
             ModelCheckpoint(
                 dirpath=None, 
@@ -46,7 +47,9 @@ class OptunaMixin(ABC):
                 mode=self.monitor()[1], 
                 save_last='link',
                 verbose=True,
-                auto_insert_metric_name=True,)
+                auto_insert_metric_name=True,
+                save_top_k=2,
+            )
             ]
         call_backs += [LearningRateMonitor()]
         #call_backs += [StochasticWeightAveraging(swa_lrs=1e-2)] # https://pytorch.org/blog/pytorch-1.6-now-includes-stochastic-weight-averaging/
