@@ -35,6 +35,7 @@ class OptunaCLI(LightningCLI):
         # For logging to slack
         if self.config["slack_webhook"]:
             logger.add(NotificationHandler("slack", defaults={"webhook_url": self.config["slack_webhook"], "message": "ERROR from analogyTP projects."}), level="ERROR")
+        set_logger(self.config["verbose"])
         
         # Tensorboard
         self.trainer.logger.experiment.add_custom_scalars({
@@ -99,7 +100,6 @@ class OptunaCLI(LightningCLI):
             iter_helper(self.optuna_trial, self.config, self.config.as_dict())
         
     def run(self, **kwargs) -> None:
-        set_logger(self.config["verbose"])
         if self.config['tune_lr']:
             if not os.path.exists(self.config["trainer"]["default_root_dir"]):
                 os.makedirs(self.config["trainer"]["default_root_dir"])
